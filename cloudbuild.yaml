@@ -1,5 +1,5 @@
 steps:
-  # Paso 1: Compilar la imagen usando los Buildpacks de Google
+  # Paso 1: Compilar la imagen usando Buildpacks
   - name: 'gcr.io/k8s-skaffold/pack'
     args:
       - 'build'
@@ -7,7 +7,7 @@ steps:
       - '--builder'
       - 'gcr.io/buildpacks/builder:v1'
 
-  # Paso 2: Desplegar la imagen compilada en Cloud Run
+  # Paso 2: Deploy en Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
     args:
@@ -19,7 +19,10 @@ steps:
       - '--region'
       - 'us-east1'
       - '--allow-unauthenticated'
+      - '--port'
+      - '8080'
+      - '--memory'
+      - '2Gi'
 
 images:
   - 'gcr.io/$PROJECT_ID/api-loan-default'
-
