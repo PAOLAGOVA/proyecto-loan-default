@@ -27,8 +27,5 @@ steps:
       - '--timeout'
       - '600'
 
-images:
-  - 'gcr.io/$PROJECT_ID/api-loan-default'
-
 options:
   logging: CLOUD_LOGGING_ONLY
