@@ -6,6 +6,7 @@ steps:
       - 'gcr.io/$PROJECT_ID/api-loan-default'
       - '--builder'
       - 'gcr.io/buildpacks/builder:v1'
+      - '--publish'
 
   # Paso 2: Deploy en Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -23,6 +24,8 @@ steps:
       - '8080'
       - '--memory'
       - '2Gi'
+      - '--timeout'
+      - '600'
 
 images:
   - 'gcr.io/$PROJECT_ID/api-loan-default'
