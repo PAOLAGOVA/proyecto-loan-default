@@ -2,6 +2,7 @@ import os
 import joblib
 import pandas as pd
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -11,32 +12,33 @@ app = FastAPI(
     description="API en producción para evaluar el riesgo de impago bancario mediante un modelo XGBoost Pipeline."
 )
 
-# 2. Cargar el Pipeline entrenado (.pkl)
-# Asegúrate de que el archivo se llame exactamente así y esté en la misma carpeta
+# 2. Configurar CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 3. Cargar el Pipeline entrenado (.pkl)
 MODEL_PATH = "xgboost_default_model.pkl"
 
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"No se encontró el archivo del modelo en: {MODEL_PATH}")
 
-# Carga el pipeline completo (Preprocesador + XGBoost)
 model_pipeline = joblib.load(MODEL_PATH)
 
-# 3. Definir la estructura de datos de entrada (Esquema de validación Pydantic)
-# Se listan las variables exactas que procesa tu modelo en el DataFrame original
+# 4. Definir la estructura de datos de entrada
 class LoanApplication(BaseModel):
-    # Variables Numéricas
     year: int = Field(..., description="Año de la solicitud", example=2019)
     loan_amount: float = Field(..., description="Monto del préstamo solicitado", example=150000.0)
     term: float = Field(..., description="Duración del préstamo en meses", example=36.0)
     income: float = Field(..., description="Ingreso anual del solicitante", example=55000.0)
     Credit_Score: int = Field(..., description="Puntaje crediticio del solicitante", example=650)
-    
-    # Variables Numéricas Especiales (Permiten nulos; si el usuario no los envía, se aplica el valor centinela -999)
-    dtir1: Optional[float] = Field(default=None, description="Debt-to-income ratio (Relación deuda-ingreso)", example=35.5)
+    dtir1: Optional[float] = Field(default=None, description="Debt-to-income ratio", example=35.5)
     property_value: Optional[float] = Field(default=None, description="Valor de la propiedad financiada", example=200000.0)
-    LTV: Optional[float] = Field(default=None, description="Loan-to-value ratio (Monto préstamo / Valor propiedad)", example=75.0)
-    
-    # Variables Categóricas (Cadenas de texto como vienen en el dataset)
+    LTV: Optional[float] = Field(default=None, description="Loan-to-value ratio", example=75.0)
     loan_limit: str = Field(..., description="cf o ncf", example="cf")
     Gender: str = Field(..., description="Male, Female, Joint, o Sex Not Available", example="Male")
     approv_in_adv: str = Field(..., description="pre o nopre", example="nopre")
@@ -69,27 +71,19 @@ def index():
 
 @app.post("/predict")
 def make_prediction(application: LoanApplication):
-    # a. Convertir la entrada en un diccionario base
     data_dict = application.model_dump()
-    
-    # b. Gestionar los valores centinela para nulos tal como se hizo en el notebook
+
     sentinel_value = -999.0
     for col in ['dtir1', 'property_value', 'LTV']:
         if data_dict[col] is None:
             data_dict[col] = sentinel_value
-            
-    # c. Crear el DataFrame de Pandas con una sola fila (mismo formato de columnas que X_train)
+
     input_df = pd.DataFrame([data_dict])
-    
-    # d. Ejecutar predicciones usando directamente el Pipeline
-    # El pipeline aplica el OneHotEncoder y SimpleImputer internamente antes de llamar a XGBoost
+
     prediction = model_pipeline.predict(input_df)[0]
     probabilities = model_pipeline.predict_proba(input_df)[0]
-    
-    # Probabilidad de pertenecer a la Clase 1 (Impago / Default)
     default_probability = probabilities[1]
-    
-    # e. Estructurar la respuesta de salida
+
     return {
         "prediction_code": int(prediction),
         "prediction_label": "Default (Impago)" if prediction == 1 else "No Default (Saldado)",
